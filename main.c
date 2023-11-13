@@ -7,6 +7,14 @@
 #include "ps2smb.h"
 #endif
 
+#ifdef SMB2
+#include "smb2.h"
+#endif
+
+#ifdef NFS
+#include "nfs.h"
+#endif
+
 extern u8 iomanx_irx[];
 extern int size_iomanx_irx;
 extern u8 filexio_irx[];
@@ -1723,6 +1731,14 @@ static void CleanUp(void)
     //    padEnd();  //Required when a newer libpad library is used.
     if (ps2kbd_opened)
         PS2KbdClose();
+#ifdef SMB2
+	deinit_smb2();
+#ifdef NFS
+    deinit_nfs();
+#endif	
+    ps2ipDeinit();
+	NetManDeinit();
+#endif
 }
 //------------------------------
 // endfunc CleanUp
@@ -2352,6 +2368,17 @@ int main(int argc, char *argv[])
     InitializeBootExecPath();
 
     CNF_error = loadConfig(mainMsg, strcpy(CNF, "LAUNCHELF.CNF"));
+
+#ifdef SMB2
+       // SMB2 / NFS
+       getIpConfig();
+       /* IP config is setup in init_smb2 */
+       init_smb2(ip, netmask, gw);
+#ifdef NFS
+       init_nfs(ip, netmask, gw);
+#endif
+       sleep(5);
+#endif
 
     if (boot == BOOT_DEVICE_HOST) {
         // If booted from the host: device, bring up the host device at this point.

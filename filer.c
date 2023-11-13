@@ -2,6 +2,13 @@
 // File name:   filer.c
 //--------------------------------------------------------------
 #include "launchelf.h"
+#ifdef SMB2
+#include "smb2.h"
+#endif
+
+#ifdef NFS
+#include "nfs.h"
+#endif
 #include <errno.h>
 
 typedef struct
@@ -15,13 +22,7 @@ typedef struct
     unsigned short year;  // date/time (year)
 } PS2TIME __attribute__((aligned(2)));
 
-#define MC_SFI 0xFEED  // flag value used for mcSetFileInfo at MC file restoration
 
-#define MC_ATTR_norm_folder 0x8427  // Normal folder on PS2 MC
-#define MC_ATTR_prot_folder 0x842F  // Protected folder on PS2 MC
-#define MC_ATTR_PS1_folder  0x9027  // PS1 save folder on PS2 MC
-#define MC_ATTR_norm_file   0x8497  // file (PS2/PS1) on PS2 MC
-#define MC_ATTR_PS1_file    0x9417  // PS1 save file on PS1 MC
 
 #define IOCTL_RENAME 0xFEEDC0DE  // Ioctl request code for Rename function
 
@@ -52,8 +53,11 @@ enum {
 int PasteProgress_f = 0;   // Flags progress report having been made in Pasting
 int PasteMode;             // Top-level PasteMode flag
 int PM_flag[MAX_RECURSE];  // PasteMode flag for each 'copy' recursion level
+#if defined(SMB2) || defined(NFS)
+struct vfs_fh *PM_file[MAX_RECURSE];
+#else
 int PM_file[MAX_RECURSE];  // PasteMode attribute file descriptors
-
+#endif
 char mountedParty[MOUNT_LIMIT][MAX_NAME];
 int latestMount = -1;
 char mountedDVRPParty[MOUNT_LIMIT][MAX_NAME];
@@ -945,6 +949,18 @@ int genRmdir(char *path)
     int ret;
 
     genLimObjName(path, 0);
+#ifdef SMB2
+	if (!strncmp(path, "smb2", 4)) {
+		return SMB2rmdir(path);
+	}
+#endif
+
+#ifdef NFS
+	if (!strncmp(path, "nfs", 3)) {
+		return NFSrmdir(path);
+	}
+#endif
+
     ret = fileXioRmdir(path);
     if (!strncmp(path, "vmc", 3))
         fileXioDevctl("vmc0:", DEVCTL_VMCFS_CLEAN, NULL, 0, NULL, 0);
@@ -1466,6 +1482,14 @@ int getDir(const char *path, FILEINFO *info)
         n = readCD(path, info, max);
     else if (!strncmp(path, "host", 4))
         n = readHOST(path, info, max);
+#ifdef SMB2
+    else if (!strncmp(path, "smb2", 4))
+		n = readSMB2(path, info, max);
+#endif
+#ifdef NFS
+	else if (!strncmp(path, "nfs", 3))
+		n = readNFS(path, info, max);
+#endif
     else if (!strncmp(path, "vmc", 3))
         n = readVMC(path, info, max);
     else
@@ -1485,7 +1509,12 @@ int getDir(const char *path, FILEINFO *info)
 static int getGameTitle(const char *path, const FILEINFO *file, unsigned char *out)
 {
     char party[MAX_NAME], dir[MAX_PATH], tmpdir[MAX_PATH];
-    int fd = -1, size, ret;
+#if defined(SMB2) || defined(NFS)
+    struct vfs_fh *fd = NULL;
+#else
+    int fd = -1;
+#endif
+    int size, ret;
     psu_header PSU_head;
     int i, tst, PSU_content, psu_pad_pos;
 
@@ -1520,24 +1549,44 @@ static int getGameTitle(const char *path, const FILEINFO *file, unsigned char *o
         if (!genCmpFileExt(tmpdir, "psu"))  // Find the extension, if any. If it's anything other than a PSU file
             goto get_PS1_GameTitle;         // then it may be a PS1 save
         // Here we know that the object needing a title is a PSU file
+#if defined(SMB2) || defined(NFS)
+        if ((fd = vfsOpen(tmpdir, O_RDONLY)) == NULL)
+#else
         if ((fd = genOpen(tmpdir, O_RDONLY)) < 0)
+#endif
             goto finish;  // Abort if open fails
+#if defined(SMB2) || defined(NFS)
+        tst = vfsRead(fd, (void *)&PSU_head, sizeof(PSU_head));
+#else
         tst = genRead(fd, (void *)&PSU_head, sizeof(PSU_head));
+#endif
         if (tst != sizeof(PSU_head))
             goto finish;  // Abort if read fails
         PSU_content = PSU_head.size;
         for (i = 0; i < PSU_content; i++) {
+#if defined(SMB2) || defined(NFS)            
+            tst = vfsRead(fd, (void *)&PSU_head, sizeof(PSU_head));     
+#else
             tst = genRead(fd, (void *)&PSU_head, sizeof(PSU_head));
+#endif
             if (tst != sizeof(PSU_head))
                 goto finish;  // Abort if read fails
             PSU_head.name[sizeof(PSU_head.name) - 1] = '\0';
             if (!strcmp((char *)PSU_head.name, "icon.sys")) {
+#if defined(SMB2) || defined(NFS) 
+                vfsLseek(fd, 0xC0, SEEK_CUR);
+#else
                 genLseek(fd, 0xC0, SEEK_CUR);
+#endif
                 goto read_title;
             }
             if (PSU_head.size) {
                 psu_pad_pos = (PSU_head.size + 0x3FF) & -0x400;
+#if defined(SMB2) || defined(NFS)
+                vfsLseek(fd, psu_pad_pos, SEEK_CUR);
+#else
                 genLseek(fd, psu_pad_pos, SEEK_CUR);
+#endif
             }
             // Here the PSU file pointer is positioned for reading next header
         }  // ends for
@@ -1549,39 +1598,81 @@ static int getGameTitle(const char *path, const FILEINFO *file, unsigned char *o
     // First try to find a valid PS2 icon.sys file inside the folder
     strcpy(tmpdir, dir);
     strcat(tmpdir, "icon.sys");
+#if defined(SMB2) || defined(NFS)   
+    if ((fd = vfsOpen(tmpdir, O_RDONLY))) {
+#else
     if ((fd = genOpen(tmpdir, O_RDONLY)) >= 0) {
+#endif
+#if defined(SMB2) || defined(NFS)
+		if ((size = vfsLseek(fd, 0, SEEK_END)) <= 0x100)
+			goto finish;
+		vfsLseek(fd, 0xC0, SEEK_SET);
+#else
         if ((size = (int)genLseek(fd, 0, SEEK_END)) <= 0x100)
             goto finish;
         genLseek(fd, 0xC0, SEEK_SET);
+#endif
         goto read_title;
     }
+
+
     // Next try to find a valid PS1 savefile inside the folder instead
     strcpy(tmpdir, dir);
     strcat(tmpdir, file->name);  // PS1 save file should have same name as folder
 
 get_PS1_GameTitle:
+#if defined(SMB2) || defined(NFS)
+    if ((fd = vfsOpen(tmpdir, O_RDONLY)) == NULL)
+        goto finish;  // PS1 gamesave file needed
+    if ((size = vfsLseek(fd, 0, SEEK_END)) < 0x2000)
+        goto finish;  // Min size is 8K
+#else
     if ((fd = genOpen(tmpdir, O_RDONLY)) < 0)
         goto finish;  // PS1 gamesave file needed
     if ((size = (int)genLseek(fd, 0, SEEK_END)) < 0x2000)
         goto finish;  // Min size is 8K
+#endif
     if (size & 0x1FFF)
         goto finish;  // Size must be a multiple of 8K
+#if defined(SMB2) || defined(NFS)
+    vfsLseek(fd, 0, SEEK_SET);
+    vfsLseek(fd, out, 2);    
+#else    
     genLseek(fd, 0, SEEK_SET);
     genRead(fd, out, 2);
+#endif
     if (strncmp((const char *)out, "SC", 2))
         goto finish;  // PS1 gamesaves always start with "SC"
+#if defined(SMB2) || defined(NFS)
+    vfsLseek(fd, 4, SEEK_SET);
+#else
     genLseek(fd, 4, SEEK_SET);
+#endif
 
 read_title:
+#if defined(SMB2) || defined(NFS)
+    vfsRead(fd, out, 32 * 2);
+#else
     genRead(fd, out, 32 * 2);
+#endif
     out[32 * 2] = 0;
+#if defined(SMB2) || defined(NFS)
+    vfsClose(fd);
+    fd = NULL;
+#else
     genClose(fd);
     fd = -1;
+#endif
     ret = 0;
 
 finish:
+#if defined(SMB2) || defined(NFS)
+	if (fd)
+		vfsClose(fd);
+#else
     if (fd >= 0)
         genClose(fd);
+#endif
     return ret;
 }
 //--------------------------------------------------------------
@@ -1997,7 +2088,19 @@ int delete (const char *path, const FILEINFO *file)
             if (ret < 0)
                 return -1;
         }
+#ifdef SMB2
+		if (!strncmp(dir, "smb2", 4)) {
+			ret = SMB2rmdir(dir);
+		} 
+#ifdef NFS
+        else if (!strncmp(dir, "nfs", 3)) {
+			ret = NFSrmdir(dir); 
+        } 
+#endif    
+        else if (!strncmp(dir, "mc", 2)) {
+#else
         if (!strncmp(dir, "mc", 2)) {
+#endif
             mcSync(0, NULL, NULL);
             mcDelete(dir[2] - '0', 0, &dir[4]);
             mcSync(0, NULL, &ret);
@@ -2014,12 +2117,53 @@ int delete (const char *path, const FILEINFO *file)
             ret = rmdir(dir);
         }
     } else {  // The object to delete is a file
+#if defined(SMB2)
+		if (!strncmp(path, "smb2", 4)) {
+			ret = SMB2unlink(dir);
+		} 
+        
+        else if (!strncmp(path, "nfs", 3)) {
+			ret = NFSunlink(dir);
+        }
+
+        else if (!strncmp(path, "mc", 2)) {
+#else
         if (!strncmp(path, "mc", 2)) {
+#endif
             mcSync(0, NULL, NULL);
             mcDelete(dir[2] - '0', 0, &dir[4]);
             mcSync(0, NULL, &ret);
-        } else if (!strncmp(path, "hdd", 3) || !strncmp(path, "dvr_hdd", 7)) {
+        } 
+#if defined(SMB2)
+	    if (!strncmp(path, "smb2", 4)) {
+#if 0
+		    sprintf(dir, "%s%s", path, file->name);
+		    sprintf(dir, "%s%s", strchr(&path[6], '/') + 1, name);
+
+		    ret = SMB2rename(oldPath, newPath);
+#else
+            ret = SMB2unlink(dir);
+#endif
+	    }
+
+#ifdef NFS
+        else if (!strncmp(path, "nfs", 3)) {
+#if 0
+		    sprintf(oldPath, "%s%s", path, file->name);
+		    sprintf(newPath, "%s%s", strchr(&path[6], '/') + 1, name);
+
+		    ret = NFSrename(oldPath, newPath);
+#else
+            ret = NFSunlink(dir);
+#endif
+        }
+#endif
+
+        else if (!strncmp(path, "hdd", 3) || !strncmp(path, "dvr_hdd", 7)) {
+#else
+        else if (!strncmp(path, "hdd", 3) || !strncmp(path, "dvr_hdd", 7)) {
             ret = unlink(hdddir);
+#endif
         } else if (!strncmp(path, "vmc", 3)) {
             ret = unlink(dir);
             fileXioDevctl("vmc0:", DEVCTL_VMCFS_CLEAN, NULL, 0, NULL, 0);
@@ -2124,7 +2268,25 @@ int newdir(const char *path, const char *name)
     char party[MAX_NAME], dir[MAX_PATH];
     int ret = 0;
 
+#ifdef SMB2
+	if (!strncmp(path, "smb2", 4)) {
+		strcpy(dir, path);
+		strcat(dir, name);
+		genLimObjName(dir, 0);
+		ret = SMB2mkdir(dir, fileMode);
+    } 
+#ifdef NFS
+    else if (!strncmp(path, "nfs", 3)) {
+		strcpy(dir, path);
+		strcat(dir, name);
+		genLimObjName(dir, 0);
+		ret = NFSmkdir(dir, fileMode);
+    }
+#endif   
+    else if (!strncmp(path, "hdd", 3)) {    
+#else
     if (!strncmp(path, "hdd", 3)) {
+#endif
         getHddParty(path, NULL, party, dir);
         ret = mountParty(party);
         if (ret < 0)
@@ -2195,7 +2357,12 @@ int copy(char *outPath, const char *inPath, FILEINFO file, int recurses)
         *buff = NULL, inParty[MAX_NAME], outParty[MAX_NAME];
     int nfiles, i;
     s64 size;
-    int ret = -1, pfsout = -1, pfsin = -1, in_fd = -1, out_fd = -1, buffSize, bytesRead, bytesWritten;
+    int ret = -1, pfsout = -1, pfsin = -1, buffSize, bytesRead, bytesWritten;
+#if defined(SMB2) || defined(NFS)
+    struct vfs_fh *out_fd = NULL, *in_fd = NULL;
+#else
+    int in_fd = -1, out_fd = -1;
+#endif
     int dummy;
     sceMcTblGetDir stats;
     int speed = 0;
@@ -2209,8 +2376,11 @@ int copy(char *outPath, const char *inPath, FILEINFO file, int recurses)
     char *cp, *np;
 
     PM_flag[recurses + 1] = PM_NORMAL;  // assume normal mode for next level
+#if defined(SMB2) || defined(NFS)
+    PM_file[recurses + 1] = NULL;         // assume that no special file is needed
+#else
     PM_file[recurses + 1] = -1;         // assume that no special file is needed
-
+#endif
 restart_copy:  // restart point for PM_PSU_RESTORE to reprocess modified arguments
 
     newfile = file;  // assume that no renaming is to be done
@@ -2305,16 +2475,26 @@ restart_copy:  // restart point for PM_PSU_RESTORE to reprocess modified argumen
                 makeHostPath(tmp + 5, tmp + 6);
 
             if (setting->PSU_DateNames && setting->PSU_NoOverwrite) {
+#if defined(SMB2) || defined(NFS)
+				if ((out_fd = vfsOpen(tmp, O_RDONLY))) {  //Name conflict ?
+					vfsClose(out_fd);
+					out_fd = NULL;
+                }
+#else
                 if (0 <= (out_fd = genOpen(tmp, O_RDONLY))) {  // Name conflict ?
                     genClose(out_fd);
                     return 0;
                 }
+#endif
             }
             // here tmp is the name of an existing file, to be removed before making new one
             genRemove(tmp);
+#if defined(SMB2) || defined(NFS)
+            if (NULL == (out_fd = vfsOpen(tmp, O_WRONLY | O_TRUNC | O_CREAT)))
+#else
             if (0 > (out_fd = genOpen(tmp, O_WRONLY | O_TRUNC | O_CREAT)))
+#endif
                 return -1;  // return error on failure to create PSU file
-
             PM_file[recurses + 1] = out_fd;
             PM_flag[recurses + 1] = PM_PSU_BACKUP;  // Set PSU backup mode for next level
             clear_psu_header(&PSU_head);
@@ -2326,10 +2506,18 @@ restart_copy:  // restart point for PM_PSU_RESTORE to reprocess modified argumen
             memcpy(PSU_head.name, mcT_head_p->name, sizeof(PSU_head.name));
             PSU_head.unknown_1_u16 = mcT_head_p->unknown_1_u16;
             PSU_head.unknown_2_u64 = mcT_head_p->unknown_2_u64;
+#if defined(SMB2) || defined(NFS)
+            size = vfsWrite(out_fd, (void *)&PSU_head, sizeof(PSU_head));
+#else
             size = genWrite(out_fd, (void *)&PSU_head, sizeof(PSU_head));
+#endif
             if (size != sizeof(PSU_head)) {
             PSU_error:
+#if defined(SMB2) || defined(NFS)
+                vfsClose(PM_file[recurses + 1]);
+#else
                 genClose(PM_file[recurses + 1]);
+#endif
                 return -1;
             }
             clear_psu_header(&PSU_head);
@@ -2337,11 +2525,20 @@ restart_copy:  // restart point for PM_PSU_RESTORE to reprocess modified argumen
             PSU_head.cTime = mcT_head_p->cTime;
             PSU_head.mTime = mcT_head_p->mTime;
             PSU_head.name[0] = '.';  // Set name entry to "."
+#if defined(SMB2) || defined(NFS)
+            size = vfsWrite(out_fd, (void *)&PSU_head, sizeof(PSU_head));            
+#else
             size = genWrite(out_fd, (void *)&PSU_head, sizeof(PSU_head));
+#endif
             if (size != sizeof(PSU_head))
                 goto PSU_error;
             PSU_head.name[1] = '.';  // Change name entry to ".."
+#if defined(SMB2) || defined(NFS)            
+            size = vfsWrite(out_fd, (void *)&PSU_head, sizeof(PSU_head));
+#else
             size = genWrite(out_fd, (void *)&PSU_head, sizeof(PSU_head));
+#endif
+            
             if (size != sizeof(PSU_head))
                 goto PSU_error;
         } else {  // any other PasteMode than PM_PSU_BACKUP
@@ -2380,30 +2577,55 @@ restart_copy:  // restart point for PM_PSU_RESTORE to reprocess modified argumen
         if (PasteMode == PM_MC_BACKUP) {  // MC Backup mode folder paste preparation
             sprintf(tmp, "%s/PS2_MC_Backup_Attributes.BUP.bin", out);
             genRemove(tmp);
+#if defined(SMB2) || defined(NFS)
+            out_fd = vfsOpen(tmp, O_WRONLY | O_CREAT);
+            if (out_fd) {
+#else
             out_fd = genOpen(tmp, O_WRONLY | O_CREAT);
-
             if (out_fd >= 0) {
+#endif
+#if defined(SMB2) || defined(NFS)
+                size = vfsWrite(out_fd, (void *)&file.stats, 64);
+#else
                 size = genWrite(out_fd, (void *)&file.stats, 64);
+#endif
                 if (size == 64) {
                     PM_file[recurses + 1] = out_fd;
                     PM_flag[recurses + 1] = PM_MC_BACKUP;
                 } else
+#if defined(SMB2) || defined(NFS)
+                    vfsClose(PM_file[recurses + 1]);
+#else
                     genClose(PM_file[recurses + 1]);
+#endif
             }
         } else if (PasteMode == PM_MC_RESTORE) {  // MC Restore mode folder paste preparation
             sprintf(tmp, "%s/PS2_MC_Backup_Attributes.BUP.bin", in);
 
             if (!strncmp(tmp, "host:/", 6))
                 makeHostPath(tmp + 5, tmp + 6);
+#if defined(SMB2) || defined(NFS)
+            in_fd = vfsOpen(tmp, O_RDONLY);
+            if (in_fd) {
+#else
             in_fd = genOpen(tmp, O_RDONLY);
-
             if (in_fd >= 0) {
+#endif
+
+#if defined(SMB2) || defined(NFS)
+                size = vfsRead(in_fd, (void *)&file.stats, 64);  // Read stats for the save folder
+#else
                 size = genRead(in_fd, (void *)&file.stats, 64);  // Read stats for the save folder
+#endif
                 if (size == 64) {
                     PM_file[recurses + 1] = in_fd;
                     PM_flag[recurses + 1] = PM_MC_RESTORE;
                 } else
+#if defined(SMB2) || defined(NFS)
+                    vfsClose(PM_file[recurses + 1]);
+#else
                     genClose(PM_file[recurses + 1]);
+#endif
             }
         }
         if (PM_flag[recurses + 1] == PM_NORMAL) {  // Normal mode folder paste preparation
@@ -2416,7 +2638,11 @@ restart_copy:  // restart point for PM_PSU_RESTORE to reprocess modified argumen
         if (PasteMode == PM_PSU_RESTORE && PSU_restart_f) {
             nfiles = PSU_content;
             for (i = 0; i < nfiles; i++) {
+#if defined(SMB2) || defined(NFS)
+                size = vfsRead(PM_file[recurses + 1], (void *)&PSU_head, sizeof(PSU_head));
+#else
                 size = genRead(PM_file[recurses + 1], (void *)&PSU_head, sizeof(PSU_head));
+#endif
                 if (size != sizeof(PSU_head)) {  // Break with error on read failure
                     ret = -1;
                     break;
@@ -2446,7 +2672,11 @@ restart_copy:  // restart point for PM_PSU_RESTORE to reprocess modified argumen
                     break;
                 // We must also step past any file padding, for next header
                 if (psu_pad_size)
+#if defined(SMB2) || defined(NFS)
+                    vfsLseek(PM_file[recurses + 1], psu_pad_size, SEEK_CUR);
+#else
                     genLseek(PM_file[recurses + 1], psu_pad_size, SEEK_CUR);
+#endif
                 // finally, we must adjust attributes of the new file copy, to ensure
                 // correct timestamps and attributes (requires MC-specific functions)
                 strcpy(tmp, out);
@@ -2481,7 +2711,11 @@ restart_copy:  // restart point for PM_PSU_RESTORE to reprocess modified argumen
         if (PM_flag[recurses + 1] == PM_MC_BACKUP) {  // MC Backup mode folder paste closure
             genClose(PM_file[recurses + 1]);
         } else if (PM_flag[recurses + 1] == PM_PSU_BACKUP) {  // PSU Backup mode folder paste closure
+#if defined(SMB2) || defined(NFS)
+            vfsLseek(PM_file[recurses + 1], 0, SEEK_SET);
+#else
             genLseek(PM_file[recurses + 1], 0, SEEK_SET);
+#endif
             clear_psu_header(&PSU_head);
             PSU_head.attr = mcT_head_p->attr;
             PSU_head.size = PSU_content;
@@ -2490,13 +2724,23 @@ restart_copy:  // restart point for PM_PSU_RESTORE to reprocess modified argumen
             memcpy(PSU_head.name, mcT_head_p->name, sizeof(PSU_head.name));
             PSU_head.unknown_1_u16 = mcT_head_p->unknown_1_u16;
             PSU_head.unknown_2_u64 = mcT_head_p->unknown_2_u64;
+#if defined(SMB2) || defined(NFS)
+            vfsWrite(PM_file[recurses + 1], (void *)&PSU_head, sizeof(PSU_head));
+            vfsLseek(PM_file[recurses + 1], 0, SEEK_END);
+            vfsClose(PM_file[recurses + 1]);
+#else
             genWrite(PM_file[recurses + 1], (void *)&PSU_head, sizeof(PSU_head));
             genLseek(PM_file[recurses + 1], 0, SEEK_END);
             genClose(PM_file[recurses + 1]);
+#endif
         } else if (PM_flag[recurses + 1] == PM_MC_RESTORE) {  // MC Restore mode folder paste closure
             in_fd = PM_file[recurses + 1];
             for (size = 64, i = 0; size == 64;) {
+#if defined(SMB2) || defined(NFS)
+                size = vfsRead(in_fd, (void *)&stats, 64);
+#else
                 size = genRead(in_fd, (void *)&stats, 64);
+#endif
                 if (size == 64) {
                     strcpy(tmp, out);
                     strncat(tmp, (const char *)stats.EntryName, 32);
@@ -2505,7 +2749,11 @@ restart_copy:  // restart point for PM_PSU_RESTORE to reprocess modified argumen
                     mcSetFileInfo(tmp[2] - '0', 0, &tmp[4], &stats, MC_SFI);  // Fix file stats
                     mcSync(0, NULL, &dummy);
                 } else {
+#if defined(SMB2) || defined(NFS)
+                    vfsClose(in_fd);
+#else
                     genClose(in_fd);
+#endif
                 }
             }
             // Finally fix the stats of the containing folder
@@ -2557,14 +2805,25 @@ restart_copy:  // restart point for PM_PSU_RESTORE to reprocess modified argumen
     if (PasteMode == PM_PSU_RESTORE && recurses == 0) {
         if (!genCmpFileExt(in, "psu"))
             goto non_PSU_RESTORE_init;  // if not a PSU file, go do normal pasting
-
+#if defined(SMB2) || defined(NFS)
+        in_fd = vfsOpen(in, O_RDONLY);
+        if (in_fd)
+#else 
         in_fd = genOpen(in, O_RDONLY);
-
         if (in_fd < 0)
+#endif
             return -1;
+#if defined(SMB2) || defined(NFS)
+        size = vfsRead(in_fd, (void *)&PSU_head, sizeof(PSU_head));
+#else
         size = genRead(in_fd, (void *)&PSU_head, sizeof(PSU_head));
+#endif
         if (size != sizeof(PSU_head)) {
+#if defined(SMB2) || defined(NFS)
+            vfsClose(in_fd);
+#else
             genClose(in_fd);
+#endif
             return -1;
         }
         PM_file[recurses + 1] = in_fd;           // File descriptor for PSU
@@ -2599,7 +2858,11 @@ non_PSU_RESTORE_init:
     } else {  // Any other mode than PM_PSU_RESTORE
         if (!strncmp(in, "host:/", 6))
             makeHostPath(in + 5, in + 6);
+#if defined(SMB2) || defined(NFS)
+        in_fd = vfsOpen(in, O_RDONLY);
+#else
         in_fd = genOpen(in, O_RDONLY);
+#endif
         if (in_fd < 0)
             goto copy_file_exit;
         size = genLseek(in_fd, 0, SEEK_END);
@@ -2617,7 +2880,11 @@ non_PSU_RESTORE_init:
         PSU_head.cTime = mcT_head_p->cTime;
         PSU_head.mTime = mcT_head_p->mTime;
         memcpy(PSU_head.name, mcT_head_p->name, sizeof(PSU_head.name));
+#if defined(SMB2) || defined(NFS)
+        vfsWrite(out_fd, (void *)&PSU_head, sizeof(PSU_head));
+#else
         genWrite(out_fd, (void *)&PSU_head, sizeof(PSU_head));
+#endif
         if (PSU_head.size & 0x3FF)
             psu_pad_size = 0x400 - (PSU_head.size & 0x3FF);
         else
@@ -2628,8 +2895,13 @@ non_PSU_RESTORE_init:
             makeHostPath(out + 5, out + 6);
         genLimObjName(out, 0);                                // Limit dest file name
         genRemove(out);                                       // Remove old file if present
+#if defined(SMB2) || defined(NFS)
+        out_fd = vfsOpen(out, O_WRONLY | O_TRUNC | O_CREAT);  // Create new file
+        if (out_fd)
+#else
         out_fd = genOpen(out, O_WRONLY | O_TRUNC | O_CREAT);  // Create new file
         if (out_fd < 0)
+#endif
             goto copy_file_exit;
     }
 
@@ -2656,8 +2928,13 @@ non_PSU_RESTORE_init:
     buff = (char *)memalign(64, buffSize);  // Attempt buffer allocation
     if (buff == NULL) {                     // if allocation fails
         ret = -ENOMEM;
+#if defined(SMB2) || defined(NFS)
+        vfsClose(out_fd);
+        out_fd = NULL;
+#else
         genClose(out_fd);
         out_fd = -1;
+#endif
         if (PM_flag[recurses] != PM_PSU_BACKUP)
             genRemove(out);
         goto copy_file_exit_mem_err;
@@ -2744,19 +3021,32 @@ non_PSU_RESTORE_init:
         drawMsg(file.name);
         if (readpad() && new_pad) {
             if (-1 == ynDialog(LNG(Continue_transfer))) {
+#if defined(SMB2) || defined(NFS)
+                vfsClose(out_fd);
+                out_fd = -1;
+#else
                 genClose(out_fd);
                 out_fd = -1;
+#endif
                 if (PM_flag[recurses] != PM_PSU_BACKUP)
                     genRemove(out);
                 ret = -1;             // flag generic error
                 goto copy_file_exit;  // go deal with it
             }
         }
+#if defined(SMB2) || defined(NFS)
+        bytesRead = vfsRead(in_fd, buff, buffSize);
+        bytesWritten = (bytesRead == buffSize) ? vfsWrite(out_fd, buff, buffSize) : 0;
+        if ((bytesRead != buffSize) || (bytesWritten != buffSize)) {
+            vfsClose(out_fd);
+            out_fd = NULL;
+#else
         bytesRead = genRead(in_fd, buff, buffSize);
         bytesWritten = (bytesRead == buffSize) ? genWrite(out_fd, buff, buffSize) : 0;
         if ((bytesRead != buffSize) || (bytesWritten != buffSize)) {
             genClose(out_fd);
             out_fd = -1;
+#endif
             if (PM_flag[recurses] != PM_PSU_BACKUP)
                 genRemove(out);
             ret = -EIO;  // flag generic I/O error
@@ -2773,27 +3063,46 @@ non_PSU_RESTORE_init:
         if (psu_pad_size) {
             pad_psu_header(&PSU_head);
             if (psu_pad_size >= sizeof(PSU_head)) {
+#if defined(SMB2) || defined(NFS)
+                vfsWrite(out_fd, (void *)&PSU_head, sizeof(PSU_head));
+                psu_pad_size -= sizeof(PSU_head);
+#else
                 genWrite(out_fd, (void *)&PSU_head, sizeof(PSU_head));
                 psu_pad_size -= sizeof(PSU_head);
+#endif
             }
             if (psu_pad_size)
+#if defined(SMB2) || defined(NFS)            
+                vfsWrite(out_fd, (void *)&PSU_head, psu_pad_size);
+#else
                 genWrite(out_fd, (void *)&PSU_head, psu_pad_size);
+#endif
         }
         out_fd = -1;  // prevent output file closure below
         goto copy_file_exit;
     }
 
     if (PM_flag[recurses] == PM_MC_BACKUP) {  // MC Backup mode file paste closure
+#if defined(SMB2) || defined(NFS)
+        size = vfsWrite(PM_file[recurses], (void *)&file.stats, 64);
+#else
         size = genWrite(PM_file[recurses], (void *)&file.stats, 64);
+#endif
         if (size != 64)
             return -1;  // Abort if attribute file crashed
     }
 
+#if defined(SMB2) || defined(NFS)
+    if (out_fd) {
+        genClose(out_fd);
+        out_fd = NULL;  // prevent dual closure attempt
+    }
+#else
     if (out_fd >= 0) {
         genClose(out_fd);
         out_fd = -1;  // prevent dual closure attempt
     }
-
+#endif
     if (!strncmp(out, "mc", 2)) {                                 // Handle file copied to MC
         mcGetInfo(out[2] - '0', 0, &mctype_PSx, &dummy, &dummy);  // Wakeup call & MC type check
         mcSync(0, NULL, &dummy);
@@ -2811,6 +3120,16 @@ non_PSU_RESTORE_init:
     } else {                                    // Handle file copied to non-MC
         if (!strncmp(out, "host", 4)) {         // for files copied to host: we skip Chstat
         } else if (!strncmp(out, "mass", 4)) {  // for files copied to mass: we skip Chstat
+#ifdef SMB2
+	        if (!strncmp(out, "smb2", 4)) {  //for files copied to smb2: we skip Chstat
+
+	        }
+#ifdef NFS 
+            else if (!strncmp(out, "nfs", 3)) {  //for files copied to nfs: we skip Chstat
+            }
+#endif
+
+#endif
         } else {                                // for other devices we use fileXio_ stuff
             memcpy(iox_stat.ctime, (void *)&file.stats._Create, 8);
             memcpy(iox_stat.mtime, (void *)&file.stats._Modify, 8);
@@ -2829,13 +3148,26 @@ copy_file_exit:
     free(buff);
 copy_file_exit_mem_err:
     if (PM_flag[recurses] != PM_PSU_RESTORE) {  // Avoid closing PSU file here for PSU Restore
+#if defined(SMB2) || defined(NFS)
+        if (in_fd) {
+            genClose(in_fd);
+        }
+#else
         if (in_fd >= 0) {
             genClose(in_fd);
         }
+#endif
     }
+
+#if defined(SMB2) || defined(NFS)
+    if (out_fd) {
+        genClose(out_fd);
+    }
+#else
     if (out_fd >= 0) {
         genClose(out_fd);
     }
+#endif
     return ret;
 }
 //------------------------------
@@ -3276,6 +3608,18 @@ int setFileList(const char *path, const char *ext, FILEINFO *files, int cnfmode)
         files[nfiles++].stats.AttrFile = sceMcFileAttrSubdir;
         strcpy(files[nfiles].name, "cdfs:");
         files[nfiles++].stats.AttrFile = sceMcFileAttrSubdir;
+#ifdef SMB2
+        if (smb2_shares) {
+			strcpy(files[nfiles].name, "smb2:");
+			files[nfiles++].stats.AttrFile = sceMcFileAttrSubdir;
+		}
+#ifdef NFS
+		if (nfs_shares) {
+			strcpy(files[nfiles].name, "nfs:");
+			files[nfiles++].stats.AttrFile = sceMcFileAttrSubdir;
+		}
+#endif
+#endif
         if ((cnfmode != USBD_IRX_CNF) && (cnfmode != USBKBD_IRX_CNF) && (cnfmode != USBMASS_IRX_CNF)) {
             // The condition above blocks selecting USB drivers from USB devices
             if (USB_mass_ix[0] || !USB_mass_scanned) {
@@ -3477,8 +3821,24 @@ int BrowserModePopup(void)
                         if (!strncmp(tmp, "cdrom", 5))
                             strcat(tmp, ";1");
                         if (res >= 0) {
-                            int fd;
+#if defined(SMB2) || defined(NFS)
+                            struct vfs_fh *fd;
 
+                            fd = vfsOpen(tmp, O_RDONLY);
+                            if (fd >= 0) {
+                                test = vfsLseek(fd, 0, SEEK_END);
+                                if (test == 55016) {
+                                    elisaFnt = (unsigned char *)memalign(64, test);
+                                    vfsLseek(fd, 0, SEEK_SET);
+                                    vfsRead(fd, elisaFnt, test);
+
+                                    elisa_failed = FALSE;
+                                }
+                                vfsClose(fd);
+                            }
+
+#else
+                            int fd;
                             fd = genOpen(tmp, O_RDONLY);
                             if (fd >= 0) {
                                 test = (int)genLseek(fd, 0, SEEK_END);
@@ -3491,6 +3851,7 @@ int BrowserModePopup(void)
                                 }
                                 genClose(fd);
                             }
+#endif
                         }
                     }
                     break;
@@ -3870,8 +4231,13 @@ int getFilePath(char *out, int cnfmode)
                             goto DoneIcon;
                         genFixPath(path, tmp1);
                         strcat(tmp1, "icon.sys");
+#if defined(SMB2) || defined(NFS)
+                        if ((ret = genOpen(tmp1, O_RDONLY))) {  // if old "icon.sys" file exists
+                            genClose(ret);
+#else
                         if ((ret = genOpen(tmp1, O_RDONLY)) >= 0) {  // if old "icon.sys" file exists
                             genClose(ret);
+#endif
                             sprintf(msg1,
                                     "\n\"icon.sys\" %s.\n\n%s ?", LNG(file_alredy_exists),
                                     LNG(Do_you_wish_to_overwrite_it));
@@ -3885,8 +4251,13 @@ int getFilePath(char *out, int cnfmode)
                         keyboard(tmp, 36);
                         genFixPath(path, tmp1);
                         strcat(tmp1, "icon.icn");
+#if defined(SMB2) || defined(NFS)
+                        if ((ret = vfsOpen(tmp1, O_RDONLY)) >= 0) {  // if old "icon.icn" file exists
+                            vfsClose(ret);
+#else
                         if ((ret = genOpen(tmp1, O_RDONLY)) >= 0) {  // if old "icon.icn" file exists
                             genClose(ret);
+#endif
                             sprintf(msg1,
                                     "\n\"icon.icn\" %s.\n\n%s ?", LNG(file_alredy_exists),
                                     LNG(Do_you_wish_to_overwrite_it));
@@ -4449,6 +4820,121 @@ void submenu_func_psuPaste(char *mess, char *path)
     }
     subfunc_Paste(mess, path);
 }
+
+#if defined(SMB2) || defined(NFS)
+struct vfs_fh *vfsOpen(char *path, int mode)
+{
+	struct vfs_fh *fh;
+
+	genLimObjName(path, 0);
+
+	fh = malloc(sizeof(struct vfs_fh));
+	if (fh == NULL) {
+		return NULL;
+	}
+	if (!strncmp(path, "smb2", 4)) {
+		fh->type = FS_SMB2;
+		fh->smb2fh = SMB2open(path, mode);
+		if (fh->smb2fh == NULL) {
+			free(fh);
+			return NULL;
+		}
+    }     
+#ifdef NFS
+    else if (!strncmp(path, "nfs", 3)) {
+		fh->type = FS_NFS;
+		fh->nfsfh = NFSopen(path, mode);
+		if (fh->nfsfh == NULL) {
+			free(fh);
+			return NULL;
+		}
+	}
+#endif 
+    else {
+		fh->type = FS_PS2;
+		fh->fd = open(path, mode, fileMode);
+		if (fh->fd == -1) {
+			free(fh);
+			return NULL;
+		}
+	}
+
+	return fh;
+}
+
+int vfsLseek(struct vfs_fh *fh, int where, int how)
+{
+	switch(fh->type) {
+	case FS_PS2:
+		return lseek(fh->fd, where, how);
+	case FS_SMB2:
+		return SMB2lseek(fh->smb2fh, where, how);
+#ifdef NFS
+	case FS_NFS:
+		return NFSlseek(fh->nfsfh, where, how);
+#endif	
+    }
+	return -1;
+}
+
+int vfsRead(struct vfs_fh *fh, void *buf, int size)
+{
+	switch(fh->type) {
+	case FS_PS2:
+		return read(fh->fd, buf, size);
+	case FS_SMB2:
+		return SMB2read(fh->smb2fh, buf, size);
+#ifdef NFS
+	case FS_NFS:
+		return NFSread(fh->nfsfh, buf, size);
+#endif
+	}
+	return -1;
+}
+
+int vfsWrite(struct vfs_fh *fh, void *buf, int size)
+{
+	switch(fh->type) {
+	case FS_PS2:
+		return write(fh->fd, buf, size);
+	case FS_SMB2:
+		return SMB2write(fh->smb2fh, buf, size);
+#ifdef NFS
+	case FS_NFS:
+		return NFSwrite(fh->nfsfh, buf, size);
+#endif
+	}
+	return -1;
+}
+
+int vfsClose(struct vfs_fh *fh)
+{
+	int rc = 0;
+
+	if (fh == NULL) {
+		return 0;
+	}
+
+	switch(fh->type) {
+	case FS_PS2:
+		rc = close(fh->fd);
+		break;
+	case FS_SMB2:
+		rc = SMB2close(fh->smb2fh);
+		free(fh->smb2fh);
+		break;
+#ifdef NFS        
+	case FS_NFS:
+		rc = NFSclose(fh->nfsfh);
+		free(fh->nfsfh);
+		break;
+#endif        
+	}
+	free(fh);
+	return rc;
+}
+#endif
+
 //------------------------------
 // endfunc submenu_func_psuPaste
 //--------------------------------------------------------------

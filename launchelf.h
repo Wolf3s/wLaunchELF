@@ -51,6 +51,28 @@
 #include <io_common.h>
 #include <ps2sdkapi.h>
 
+#if defined(SMB2) || defined(NFS)
+enum vfs_type {
+	FS_PS2 = 0,
+	FS_SMB2,
+#ifdef NFS
+	FS_NFS
+#endif
+};
+
+struct vfs_fh {
+	enum vfs_type type;
+	union {
+		int fd;
+		struct SMB2FH *smb2fh;
+#ifdef NFS
+		struct NFSFH *nfsfh;
+#endif
+	};
+};
+#endif
+
+
 #ifdef SIO_DEBUG
 #define DPRINTF(args...) sio_printf(args)
 #else
@@ -359,6 +381,15 @@ void unmountParty(int party_ix);
 void unmountAll(void);
 int setFileList(const char *path, const char *ext, FILEINFO *files, int cnfmode);
 
+#ifdef SMB2
+/* VFS layer */
+struct vfs_fh *vfsOpen(char *path, int mode);
+int vfsLseek(struct vfs_fh *fh, int where, int how);
+int vfsRead(struct vfs_fh *fh, void *buf, int size);
+int vfsWrite(struct vfs_fh *fh, void *buf, int size);
+int vfsClose(struct vfs_fh *fh);
+#endif
+
 /* hdd.c */
 void DebugDisp(char *Message);
 void hddManager(void);
@@ -457,5 +488,13 @@ extern int USB_mass_max_drives;
 extern u64 USB_mass_scan_time;
 extern int USB_mass_scanned;
 extern int USB_mass_loaded;  // 0==none, 1==internal, 2==external
+
+#define MC_SFI 0xFEED  // flag value used for mcSetFileInfo at MC file restoration
+
+#define MC_ATTR_norm_folder 0x8427  // Normal folder on PS2 MC
+#define MC_ATTR_prot_folder 0x842F  // Protected folder on PS2 MC
+#define MC_ATTR_PS1_folder  0x9027  // PS1 save folder on PS2 MC
+#define MC_ATTR_norm_file   0x8497  // file (PS2/PS1) on PS2 MC
+#define MC_ATTR_PS1_file    0x9417  // PS1 save file on PS1 MC
 
 #endif

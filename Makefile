@@ -2,7 +2,11 @@
 
 SMB ?= 0
 SIO_DEBUG ?= 0
-#set SMB to 1 to build uLe with smb support
+SMB2 ?= 0
+NFS ?= 0
+#set SMB to 1 for build uLe with smb support
+#set SMB2 to 1 for build uLe with smb2 support 
+#set NFS to 1 for build uLe with nfs support
 
 EE_BIN = BOOT-UNC.ELF
 EE_BIN_PKD = BOOT.ELF
@@ -15,7 +19,15 @@ EE_OBJS = main.o pad.o config.o elf.o draw.o loader_elf.o filer.o \
 	font_uLE.o makeicon.o chkesr.o allowdvdv_irx.o
 
 ifeq ($(SMB),1)
-	EE_OBJS += smbman.o
+	EE_OBJS += smbman_irx.o
+endif
+
+ifeq ($(SMB2),1)
+	EE_OBJS += smb2.o
+endif
+
+ifeq ($(NFS),1)
+	EE_OBJS += nfs.o
 endif
 
 EE_OBJS_DIR = obj/
@@ -25,8 +37,20 @@ EE_OBJS := $(EE_OBJS:%=$(EE_OBJS_DIR)%)
 EE_INCS := -I$(PS2DEV)/gsKit/include -I$(PS2SDK)/ports/include
 
 EE_LDFLAGS := -L$(PS2DEV)/gsKit/lib -L$(PS2SDK)/ports/lib -s
+
 EE_LIBS = -lgskit -ldmakit -ljpeg_ps2_addons -ljpeg -lpad -lmc -lhdd -lkbd -lm \
 	-lcdvd -lfileXio -lpatches -lpoweroff -ldebug -lsior
+
+ifeq ($(SMB2),1)
+	EE_LIBS += -lsmb2 
+endif
+
+ifeq ($(NFS),1)
+	EE_LIBS += -lnfs 
+endif
+
+EE_LIBS += -lps2ip -lnetman
+
 EE_CFLAGS := -mno-gpopt -G0
 
 ifeq ($(SIO_DEBUG),1)
@@ -36,6 +60,14 @@ endif
 
 ifeq ($(SMB),1)
 	EE_CFLAGS += -DSMB
+endif
+
+ifeq ($(SMB2),1)
+	EE_CFLAGS += -DSMB2
+endif
+
+ifeq ($(NFS),1)
+	EE_CFLAGS += -DNFS
 endif
 
 BIN2S = $(PS2SDK)/bin/bin2s
