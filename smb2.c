@@ -150,14 +150,9 @@ int init_smb2(const char *ip, const char *netmask, const char *gw)
 	struct ip4_addr IP, NM, GW;
         int ip4[4];
         int rc;
-        int i; 
 
 	init_scr(); 
-        {
-	        for (i=0;i<2;i++) {
-                        scr_printf("Woff\n");
-                }
-        }
+
 	NetManInit();
 
 	sscanf(ip, "%d.%d.%d.%d", &ip4[0], &ip4[1], &ip4[2], &ip4[3]);
