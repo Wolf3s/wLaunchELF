@@ -2122,14 +2122,14 @@ int delete (const char *path, const FILEINFO *file)
 			ret = SMB2unlink(dir);
 		} 
 
-        else if (!strncmp(path, "mc", 2)) {
-            
-#elif defined(NFS)
+#ifdef NFS
         else if (!strncmp(path, "nfs", 3)) {
 			ret = NFSunlink(dir);
         }
+#endif
+
         else if (!strncmp(path, "mc", 2)) {
-#else
+#else            
         if (!strncmp(path, "mc", 2)) {
 #endif
             mcSync(0, NULL, NULL);

@@ -381,7 +381,7 @@ void unmountParty(int party_ix);
 void unmountAll(void);
 int setFileList(const char *path, const char *ext, FILEINFO *files, int cnfmode);
 
-#ifdef SMB2
+#if defined(SMB2) || defined(NFS)
 /* VFS layer */
 struct vfs_fh *vfsOpen(char *path, int mode);
 int vfsLseek(struct vfs_fh *fh, int where, int how);
