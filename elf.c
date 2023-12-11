@@ -56,7 +56,7 @@ int checkELFheader(char *path)
     elf_header_t elf_head;
     u8 *boot_elf = (u8 *)&elf_head;
     elf_header_t *eh = (elf_header_t *)boot_elf;
-#if defined(SMB2) || defined(NFS)    
+#if defined(SMB2) || defined(NFS)
     struct vfs_fh *fd = NULL;
 #else
     int fd;
@@ -101,7 +101,7 @@ int checkELFheader(char *path)
     } else {
         return 0;  // return 0 for unrecognized device
     }
-#if defined(SMB2) || defined(NFS)   
+#if defined(SMB2) || defined(NFS)
     if ((fd = vfsOpen(fullpath, O_RDONLY)) < NULL)
         goto error;
     size = vfsLseek(fd, 0, SEEK_END);

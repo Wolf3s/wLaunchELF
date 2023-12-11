@@ -1,12 +1,13 @@
 /* -*-  mode:c; tab-width:8; c-basic-offset:8; indent-tabs-mode:nil;  -*- */
 //---------------------------------------------------------------------------
-//File name:   nfs.h
+// File name:   nfs.h
 //---------------------------------------------------------------------------
-struct nfs_share {
-        struct nfs_share *next;
-        struct nfs_context *nfs;
-        char *name;
-        char *url;
+struct nfs_share
+{
+    struct nfs_share *next;
+    struct nfs_context *nfs;
+    char *name;
+    char *url;
 };
 
 extern struct nfs_share *nfs_shares;
@@ -14,9 +15,10 @@ extern struct nfs_share *nfs_shares;
 int init_nfs(const char *ip, const char *netmask, const char *gw);
 void deinit_nfs(void);
 
-struct NFSFH {
-        struct nfs_context *nfs;
-        struct nfsfh *fh;
+struct NFSFH
+{
+    struct nfs_context *nfs;
+    struct nfsfh *fh;
 };
 
 struct NFSFH *NFSopen(const char *path, int mode);
@@ -32,5 +34,5 @@ int NFSunlink(const char *dir);
 int NFSrename(const char *path, const char *newpath);
 
 //---------------------------------------------------------------------------
-//End of file: nfs.h
+// End of file: nfs.h
 //---------------------------------------------------------------------------

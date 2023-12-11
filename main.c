@@ -1732,12 +1732,12 @@ static void CleanUp(void)
     if (ps2kbd_opened)
         PS2KbdClose();
 #ifdef SMB2
-	deinit_smb2();
+    deinit_smb2();
 #ifdef NFS
     deinit_nfs();
-#endif	
+#endif
     ps2ipDeinit();
-	NetManDeinit();
+    NetManDeinit();
 #endif
 }
 //------------------------------
@@ -2370,14 +2370,14 @@ int main(int argc, char *argv[])
     CNF_error = loadConfig(mainMsg, strcpy(CNF, "LAUNCHELF.CNF"));
 
 #ifdef SMB2
-       // SMB2 / NFS
-       getIpConfig();
-       /* IP config is setup in init_smb2 */
-       init_smb2(ip, netmask, gw);
+    // SMB2 / NFS
+    getIpConfig();
+    /* IP config is setup in init_smb2 */
+    init_smb2(ip, netmask, gw);
 #ifdef NFS
-       init_nfs(ip, netmask, gw);
+    init_nfs(ip, netmask, gw);
 #endif
-       sleep(5);
+    sleep(5);
 #endif
 
     if (boot == BOOT_DEVICE_HOST) {

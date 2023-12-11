@@ -53,22 +53,24 @@
 
 #if defined(SMB2) || defined(NFS)
 enum vfs_type {
-	FS_PS2 = 0,
-	FS_SMB2,
+    FS_PS2 = 0,
+    FS_SMB2,
 #ifdef NFS
-	FS_NFS
+    FS_NFS
 #endif
 };
 
-struct vfs_fh {
-	enum vfs_type type;
-	union {
-		int fd;
-		struct SMB2FH *smb2fh;
+struct vfs_fh
+{
+    enum vfs_type type;
+    union
+    {
+        int fd;
+        struct SMB2FH *smb2fh;
 #ifdef NFS
-		struct NFSFH *nfsfh;
+        struct NFSFH *nfsfh;
 #endif
-	};
+    };
 };
 #endif
 

@@ -1,6 +1,6 @@
 #.SILENT:
 
-SMB ?= 1
+SMB ?= 0
 SIO_DEBUG ?= 0
 SMB2 ?= 0
 NFS ?= 0
