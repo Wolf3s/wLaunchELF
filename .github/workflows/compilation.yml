@@ -20,6 +20,18 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git fetch --prune --unshallow
 
+      - name: Install libsmb
+        run: |
+           git clone https://github.com/sahlberg/libsmb2.git
+           cd libsmb2/lib 
+           make install clean -f Makefile.PS2_EE 
+
+      - name: Install libnfs
+        run: |
+          git clone https://github.com/sahlberg/libnfs.git
+          cd libnfs/ps2_ee
+          make install clean -f Makefile.PS2_EE
+
       - name: Compile wLaunchELF
         run: |
           make

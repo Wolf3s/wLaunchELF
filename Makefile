@@ -4,9 +4,9 @@ SMB ?= 0
 SIO_DEBUG ?= 0
 SMB2 ?= 0
 NFS ?= 0
-#set SMB to 1 for build uLe with smb support
-#set SMB2 to 1 for build uLe with smb2 support 
-#set NFS to 1 for build uLe with nfs support
+#set SMB to 1 for build wLe with smb support
+#set SMB2 to 1 for build wLe with smb2 support 
+#set NFS to 1 for build wLe with nfs support
 
 EE_BIN = BOOT-UNC.ELF
 EE_BIN_PKD = BOOT.ELF
@@ -42,7 +42,7 @@ EE_LIBS = -lgskit -ldmakit -ljpeg_ps2_addons -ljpeg -lpad -lmc -lhdd -lkbd -lm \
 	-lcdvd -lfileXio -lpatches -lpoweroff -ldebug -lsior
 
 ifeq ($(SMB2),1)
-	EE_LIBS += -lsmb2 
+	EE_LIBS += -lsmb2_ip 
 endif
 
 ifeq ($(NFS),1)
