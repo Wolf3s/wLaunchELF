@@ -3,9 +3,11 @@
 SMB ?= 0
 SIO_DEBUG ?= 0
 SMB2 ?= 1
+SMB2_IRX ?= 0
 NFS ?= 1
 #set SMB to 1 for build wLe with smb support
 #set SMB2 to 1 for build wLe with smb2 support 
+#set SMB2_IRX to 1 for build wLe with smb2man.irx support(it needs smb2 activated to work).
 #set NFS to 1 for build wLe with nfs support
 
 EE_BIN = BOOT-UNC.ELF
@@ -179,6 +181,11 @@ $(EE_ASM_DIR)ps2host_irx.c: ps2host/ps2host.irx | $(EE_ASM_DIR)
 ifeq ($(SMB),1)
 $(EE_ASM_DIR)smbman_irx.c: $(PS2SDK)/iop/irx/smbman.irx | $(EE_ASM_DIR)
 	$(BIN2C) $< $@ smbman_irx
+endif
+
+ifeq ($(SMB2_IRX),1)
+$(EE_ASM_DIR)smb2man_irx.c: $(PS2SDK)/iop/irx/smb2man.irx | $(EE_ASM_DIR)
+	$(BIN2C) $< $@ smb2man_irx
 endif
 
 vmc_fs/vmc_fs.irx: vmc_fs

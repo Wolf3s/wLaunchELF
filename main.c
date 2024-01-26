@@ -33,6 +33,10 @@ extern int size_ps2host_irx;
 extern u8 smbman_irx[];
 extern int size_smbman_irx;
 #endif
+#ifdef SMB2_IRX
+extern u8 smb2man_irx[];
+extern int size_smb2man_irx;
+#endif
 extern u8 vmc_fs_irx[];
 extern int size_vmc_fs_irx;
 extern u8 ps2ftpd_irx[];
@@ -149,6 +153,7 @@ static u8 have_ps2hdd = 0;
 static u8 have_ps2fs = 0;
 static u8 have_ps2netfs = 0;
 static u8 have_smbman = 0;
+static u8 have_smb2man = 0;
 static u8 have_vmc_fs = 0;
 static u8 have_dvrdrv = 0;
 static u8 have_dvrfile = 0;
@@ -228,6 +233,9 @@ static void load_ps2ip(void);
 static void load_ps2atad(void);
 #ifdef SMB
 static void load_smbman(void);
+#endif
+#ifdef SMB2_IRX
+static void load_smb2man(void);
 #endif
 static void ShowDebugInfo(void);
 static void load_ps2ftpd(void);
@@ -796,6 +804,21 @@ static void load_smbman(void)
 //---------------------------------------------------------------------------
 #include "SMB_test.c"
 #endif
+
+#ifdef SMB2_IRX
+static void load_smb2man(void)
+{
+    int ret;
+
+    setupPowerOff();  // resolves stall out when opening smb: FileBrowser
+    load_ps2ip();
+    if (!have_smb2man) {
+        SifExecModuleBuffer(smbman_irx, size_smbman_irx, 0, NULL, &ret);
+        have_smb2man = 1;
+    }
+}
+#endif
+
 static void load_ps2dvr(void)
 {
     int ret;
@@ -830,6 +853,10 @@ static void ShowDebugInfo(void)
     load_smbman();
     loadSMBCNF("mc0:/SYS-CONF/SMB.CNF");
     smbCurrentServer = 0;
+#endif
+
+#ifdef SMB2_IRX
+    load_smb2man();
 #endif
     event = 1;  // event = initial entry
     //----- Start of event loop -----
@@ -2136,6 +2163,7 @@ static void Reset()
     have_ps2host = 0;
     have_vmc_fs = 0;
     have_smbman = 0;
+    have_smb2man = 0;
     have_ps2ftpd = 0;
     have_ps2kbd = 0;
     have_dvrdrv = 0;
