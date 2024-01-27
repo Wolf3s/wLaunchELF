@@ -1,0 +1,13 @@
+# ---------------------------------------------------------------------------
+# File name:    NFS.CNF                            Revision Date: 2021.09.13
+# Created by:   Ronnie Sahlberg                    Creation Date: 2021.09.13
+# ---------------------------------------------------------------------------
+# Purpose:      Define NFS servers for the NFS implementation of wLaunchELF
+# Optional URL arguments, to for example enable NFSv4,
+# can be found in the libnfs README file.
+# ---------------------------------------------------------------------------
+NAME = BIG-NFS
+URL = nfs://10.10.10.10/data/BIG
+#----------------------------------------------------------------------------
+# End of file: NFS.CNF
+#----------------------------------------------------------------------------
