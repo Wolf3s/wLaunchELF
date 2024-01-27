@@ -24,6 +24,10 @@ ifeq ($(SMB),1)
 	EE_OBJS += smbman_irx.o
 endif
 
+ifeq ($(SMB2_IRX),1)
+	EE_OBJS += smb2man_irx.o
+endif
+
 ifeq ($(SMB2),1)
 	EE_OBJS += smb2.o
 endif
