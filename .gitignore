@@ -13,29 +13,13 @@
 *.erl
 *.exe
 *.irx
-*.map
-*.o
-*.patch
-*.rej
-*.s
-*.zip
-*.ZIP
-*.a
 
-#
-# files that we don't want to ignore
-#
-!.gitignore
-!.gitattributes
-!.github
-!.editorconfig
-!.clang-format*
+asm/*
+obj/*
 
-#
-# Generated source files
-#
 githash.h
-
-#objects and embedded files subfolders
-obj/
-asm/
+!iop/__precompiled/*
+iop/vmc_fs.irx
+iso/
+*.iso
+*.zip
