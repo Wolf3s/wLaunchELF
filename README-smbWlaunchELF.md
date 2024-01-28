@@ -64,14 +64,17 @@ the root in the file manager.
 See libnfs README file for optional URL arguments, such as selecting NFSv4.
 
 # FAQ´S
-Q: Is smbwLaunchELF will be merged sometime with wLaunchELF Source Code:
+Q: Is smbwLaunchELF will be merged sometime with wLaunchELF´s Source Code?
+
 A: For now no.
 
 Q: Will you add SMB2 on wLaunchELF_isr(el_isra version)?
+
 A: Yes, i will add it on a separate branch.
 
 Q: Could you add smb2man module to the official repository of Open Source PS2SDK?
-A: At the moment no due to smb2 it´s on testing stage, but maybe soon it should be merge, It´s difficult to me keep PS2SDK updated to the latest branch with smb2man support.
+
+A: At the moment no, Since smb2 it´s on testing stage however, maybe soon it should be ready to merge. It´s difficult to me keep PS2SDK updated to the latest branch with smb2man support.
 
 # wLaunchELF
 
