@@ -65,17 +65,13 @@ See libnfs README file for optional URL arguments, such as selecting NFSv4.
 
 # FAQ´S
 Q: Is smbwLaunchELF will be merged sometime with wLaunchELF´s Source Code?
-
 A: For now no.
 
 Q: Will you add SMB2 on wLaunchELF_isr(el_isra version)?
-
 A: Yes, i will add it on a separate branch.
 
 Q: Could you add smb2man module to the official repository of Open Source PS2SDK?
-
-A: At the moment no, Since smb2 it´s on testing stage however, maybe soon it should be ready to merge. It´s difficult to me keep PS2SDK updated to the latest branch with smb2man support.
+A: No, due to the libsmb2 internal source code is licensed with L-GPL which conflicts with other major licenses, i can´t merge to the official repository unfortunally. i would have to request sahlberg´s to migrate or L-GPL to BSD or mit see here: https://github.com/sahlberg/libsmb2/pull/300#discussion_r1430790631
 
 # wLaunchELF
-
 wLaunchELF, formerly known as uLaunchELF, also known as wLE or uLE (abbreviated), is an open-source file manager and executable launcher for the Playstation 2 console based on the original LaunchELF. It contains many different features, including a text editor, hard drive manager, FTP support, and much more.
