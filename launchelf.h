@@ -245,7 +245,7 @@ int uLE_cdStop(void);
 int IsSupportedFileType(char *path);
 
 /* elf.c */
-int checkELFheader(char *filename);
+int checkELFheader(char *path);
 void RunLoaderElf(char *filename, char *);
 
 /* draw.c */
@@ -289,7 +289,7 @@ void setupGS(void);
 void updateScreenMode(void);
 void clrScr(u64 color);
 void setBrightness(int Brightness);
-void loadSkin(int Picture, char *Path, int ThumbNum);
+void loadSkin(int Picture, const char *Path, int ThumbNum);
 void drawScr(void);
 void drawFrame(int x1, int y1, int x2, int y2, u64 color);
 void drawChar(unsigned int c, int x, int y, u64 colour);
@@ -297,7 +297,7 @@ int printXY(const char *s, int x, int y, u64 colour, int draw, int space);
 int printXY_sjis(const unsigned char *s, int x, int y, u64 colour, int);
 char *transcpy_sjis(char *d, const unsigned char *s);
 void loadIcon(void);
-int loadFont(char *path_arg);
+int loadFont(const char *path_arg);
 // Comment out WriteFont_C when not used (also requires patch in draw.c)
 // int	WriteFont_C(char *pathname);
 
@@ -334,12 +334,12 @@ enum TV_mode {
 extern char PathPad[30][MAX_PATH];
 extern SETTING *setting;
 void initConfig(void);
-int loadConfig(char *, char *);  // 0==OK, -1==load failed
-void config(char *, char *);
+int loadConfig(char *, const char *);  // 0==OK, -1==load failed
+void config(char *, const char *);
 int get_CNF_string(char **CNF_p_p,
                    char **name_p_p,
                    char **value_p_p);  // main CNF name,value parser
-char *preloadCNF(char *path);          // loads file into RAM it allocates
+char *preloadCNF(const char *path);    // loads file into RAM it allocates
 
 /* filer.c */
 typedef struct
@@ -360,9 +360,9 @@ extern unsigned char *elisaFnt;
 char *PathPad_menu(const char *path);
 int getFilePath(char *out, const int cnfmode);
 void initHOST(void);
-char *makeHostPath(char *dp, char *sp);
+char *makeHostPath(char *dp, const char *sp);
 int ynDialog(const char *message);
-void nonDialog(char *message);
+void nonDialog(const char *message);
 int keyboard(char *out, int max);
 void genLimObjName(char *uLE_path, int reserve);
 int genFixPath(const char *inp_path, char *gen_path);
@@ -393,11 +393,11 @@ int vfsClose(struct vfs_fh *fh);
 #endif
 
 /* hdd.c */
-void DebugDisp(char *Message);
+void DebugDisp(const char *Message);
 void hddManager(void);
 
 /* editor.c */
-void TextEditor(char *path);
+void TextEditor(const char *path);
 
 /* timer.c */
 extern u64 WaitTime;
@@ -406,7 +406,7 @@ extern u64 CurrTime;
 u64 Timer(void);
 
 /* jpgviewer.c */
-void JpgViewer(char *file);
+void JpgViewer(const char *file);
 
 /* lang.c */
 typedef struct Language
@@ -458,8 +458,8 @@ enum {
 };
 
 /* makeicon.c */
-int make_icon(char *icontext, char *filename);
-int make_iconsys(char *title, char *iconname, char *filename);
+int make_icon(const char *icontext, const char *filename);
+int make_iconsys(char *title, const char *iconname, const char *filename);
 
 
 // vmcfs definitions
