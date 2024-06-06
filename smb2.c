@@ -13,11 +13,13 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-#include <launchelf.h>
+#include "launchelf.h"
 #include <sbv_patches.h>
 #include <smb2.h>
 
 #include <smb2/libsmb2.h>
+
+extern void clear_mcTable(sceMcTblGetDir *mcT);
 
 extern int size_valid;
 extern int time_valid;

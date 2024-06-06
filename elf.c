@@ -102,7 +102,7 @@ int checkELFheader(char *path)
         return 0;  // return 0 for unrecognized device
     }
 #if defined(SMB2) || defined(NFS)
-    if ((fd = vfsOpen(fullpath, O_RDONLY)) < NULL)
+    if ((fd = vfsOpen(fullpath, O_RDONLY)) == NULL)
         goto error;
     size = vfsLseek(fd, 0, SEEK_END);
     if (!size) {

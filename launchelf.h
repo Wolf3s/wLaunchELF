@@ -46,6 +46,9 @@
 #include <sio.h>
 #include <sior_rpc.h>
 
+#include <ps2ip.h>
+#include <netman.h>
+
 #define NEWLIB_PORT_AWARE
 #include <fileXio_rpc.h>
 #include <io_common.h>

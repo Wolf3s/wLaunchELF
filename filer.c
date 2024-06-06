@@ -1638,7 +1638,7 @@ get_PS1_GameTitle:
         goto finish;  // Size must be a multiple of 8K
 #if defined(SMB2) || defined(NFS)
     vfsLseek(fd, 0, SEEK_SET);
-    vfsLseek(fd, out, 2);
+    vfsRead(fd, out, 2);
 #else
     genLseek(fd, 0, SEEK_SET);
     genRead(fd, out, 2);
@@ -2693,7 +2693,11 @@ restart_copy:  // restart point for PM_PSU_RESTORE to reprocess modified argumen
                 mcSetFileInfo(tmp[2] - '0', 0, &tmp[4], &files[0].stats, MC_SFI);  // Fix file stats
                 mcSync(0, NULL, &dummy);
             }                                 // ends main for loop of valid PM_PSU_RESTORE mode
+#if defined(SMB2) || defined(NFS)
+            vfsClose(PM_file[recurses + 1]);  // Close the PSU file
+#else
             genClose(PM_file[recurses + 1]);  // Close the PSU file
+#endif
                                               // Finally fix the stats of the containing folder
                                               // It has to be done last, as timestamps would change when fixing files
                                               //--- This has been moved to a later clause, shared with PM_MC_RESTORE ---
@@ -2716,7 +2720,11 @@ restart_copy:  // restart point for PM_PSU_RESTORE to reprocess modified argumen
         // attributes and timestamps, and close the attribute/PSU file if such was used
         // Lots of stuff need to be done here to make PSU operations work properly
         if (PM_flag[recurses + 1] == PM_MC_BACKUP) {  // MC Backup mode folder paste closure
+#if defined(SMB2) || defined(NFS)
+            vfsClose(PM_file[recurses + 1]);
+#else
             genClose(PM_file[recurses + 1]);
+#endif
         } else if (PM_flag[recurses + 1] == PM_PSU_BACKUP) {  // PSU Backup mode folder paste closure
 #if defined(SMB2) || defined(NFS)
             vfsLseek(PM_file[recurses + 1], 0, SEEK_SET);
@@ -2872,8 +2880,13 @@ non_PSU_RESTORE_init:
 #endif
         if (in_fd < 0)
             goto copy_file_exit;
+#if defined(SMB2) || defined(NFS)
+        size = vfsLseek(in_fd, 0, SEEK_END);
+        vfsLseek(in_fd, 0, SEEK_SET);
+#else
         size = genLseek(in_fd, 0, SEEK_END);
         genLseek(in_fd, 0, SEEK_SET);
+#endif
     }
 
     // Here the input file has been opened, indicated by 'in_fd'
@@ -3030,7 +3043,7 @@ non_PSU_RESTORE_init:
             if (-1 == ynDialog(LNG(Continue_transfer))) {
 #if defined(SMB2) || defined(NFS)
                 vfsClose(out_fd);
-                out_fd = -1;
+                out_fd = NULL;
 #else
                 genClose(out_fd);
                 out_fd = -1;
@@ -3085,7 +3098,11 @@ non_PSU_RESTORE_init:
                 genWrite(out_fd, (void *)&PSU_head, psu_pad_size);
 #endif
         }
+#if defined(SMB2) || defined(NFS)
+        out_fd = NULL;  // prevent output file closure below
+#else
         out_fd = -1;  // prevent output file closure below
+#endif
         goto copy_file_exit;
     }
 
@@ -3101,7 +3118,7 @@ non_PSU_RESTORE_init:
 
 #if defined(SMB2) || defined(NFS)
     if (out_fd) {
-        genClose(out_fd);
+        vfsClose(out_fd);
         out_fd = NULL;  // prevent dual closure attempt
     }
 #else
@@ -3157,7 +3174,7 @@ copy_file_exit_mem_err:
     if (PM_flag[recurses] != PM_PSU_RESTORE) {  // Avoid closing PSU file here for PSU Restore
 #if defined(SMB2) || defined(NFS)
         if (in_fd) {
-            genClose(in_fd);
+            vfsClose(in_fd);
         }
 #else
         if (in_fd >= 0) {
@@ -3168,7 +3185,7 @@ copy_file_exit_mem_err:
 
 #if defined(SMB2) || defined(NFS)
     if (out_fd) {
-        genClose(out_fd);
+        vfsClose(out_fd);
     }
 #else
     if (out_fd >= 0) {
@@ -4238,14 +4255,17 @@ int getFilePath(char *out, int cnfmode)
                         }
                     }  // ends NEWDIR
                     else if (ret == NEWICON) {
+#if defined(SMB2) || defined(NFS)
+						struct vfs_fh *fh;
+#endif
                         strcpy(tmp, LNG(Icon_Title));
                         if (keyboard(tmp, 36) <= 0)
                             goto DoneIcon;
                         genFixPath(path, tmp1);
                         strcat(tmp1, "icon.sys");
 #if defined(SMB2) || defined(NFS)
-                        if ((ret = genOpen(tmp1, O_RDONLY))) {  // if old "icon.sys" file exists
-                            genClose(ret);
+                        if ((fh = vfsOpen(tmp1, O_RDONLY))) {  // if old "icon.sys" file exists
+                            vfsClose(fh);
 #else
                         if ((ret = genOpen(tmp1, O_RDONLY)) >= 0) {  // if old "icon.sys" file exists
                             genClose(ret);
@@ -4264,8 +4284,8 @@ int getFilePath(char *out, int cnfmode)
                         genFixPath(path, tmp1);
                         strcat(tmp1, "icon.icn");
 #if defined(SMB2) || defined(NFS)
-                        if ((ret = vfsOpen(tmp1, O_RDONLY)) >= 0) {  // if old "icon.icn" file exists
-                            vfsClose(ret);
+                        if ((fh = vfsOpen(tmp1, O_RDONLY)) >= 0) {  // if old "icon.icn" file exists
+                            vfsClose(fh);
 #else
                         if ((ret = genOpen(tmp1, O_RDONLY)) >= 0) {  // if old "icon.icn" file exists
                             genClose(ret);
@@ -4777,7 +4797,11 @@ void subfunc_Paste(char *mess, const char *path)
         strcat(tmp, tmp1);
         drawMsg(tmp);
         PM_flag[0] = PM_NORMAL;  // Always use normal mode at top level
+#if defined(SMB2) || defined(NFS)
+        PM_file[0] = NULL;         // Thus no attribute file is used here
+#else
         PM_file[0] = -1;         // Thus no attribute file is used here
+#endif
         ret = copy(path, clipPath, clipFiles[i], 0);
         if (ret < 0)
             break;

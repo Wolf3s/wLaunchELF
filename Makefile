@@ -4,7 +4,7 @@ SMB ?= 0
 SIO_DEBUG ?= 0
 SMB2 ?= 1
 SMB2_IRX ?= 0
-NFS ?= 1
+NFS ?= 0
 #set SMB to 1 for build wLe with smb support
 #set SMB2 to 1 for build wLe with smb2 support 
 #set SMB2_IRX to 1 for build wLe with smb2man.irx support(it needs smb2 activated to work).
