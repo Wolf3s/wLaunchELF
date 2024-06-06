@@ -813,7 +813,7 @@ static void load_smb2man(void)
     setupPowerOff();  // resolves stall out when opening smb: FileBrowser
     load_ps2ip();
     if (!have_smb2man) {
-        SifExecModuleBuffer(smbman_irx, size_smbman_irx, 0, NULL, &ret);
+        SifExecModuleBuffer(smb2man_irx, size_smb2man_irx, 0, NULL, &ret);
         have_smb2man = 1;
     }
 }
